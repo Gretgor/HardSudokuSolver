@@ -33,3 +33,18 @@ Moves in the move stack:
       - Sets the value of row,col to 0
       - Lower the number of assigned cells by 1
       - If the move in question is the bifurcation move, then stack a "rem" instruction for row,col,val
+  - Remove moves. Syntax: ("rem",row,col,val)
+    When being DONE:
+    - Removes val from the possibilities for row,col
+      - If only one possible value remains, stack a 'set' instruction for that value
+      - If no values remain, raise an "ERROR"
+    - Decrease the number of potential cells for val in the row/column/box of row,col by 1
+      - If the number of potential cells for val in the row/column/box is 1, then stack a 'set' instruction for the remaining cell
+      - If the number of potential cells for val in the row/column/box is 0, raise an "ERROR"
+    When being UNDONE:
+    - Adds val to the possibilities for row,col
+    - Increase the number of potential cells for val in the row/column/box of row,col by 1
+  - There is an extra special instruction consisting only of a string that says "ERROR", which signals that the solver should start
+    backtracking to the last bifurcation. I would have used None instead, but I felt it could get confusing.
+    - Calls the backtracking method to go to the last bifurcation
+      - If no bifurcations exist, raise an Error (as in an actual error) saying the puzzle is unsolvable
