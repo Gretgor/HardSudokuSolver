@@ -25,23 +25,23 @@ About my solution:
 Moves in the move stack:
   - Moves in the move stack are in one of two categories:
     - Set moves. Syntax: ("set",row,col,val)
-      When being DONE:
+      > When being DONE:
       - Sets the value of row,col to val
       - Increase the number of assigned cells by 1
       - Stacks "rem" instructions for the value in val for every cell in the same row/column/box as row,col
-      When being UNDONE:
+      > When being UNDONE:
       - Sets the value of row,col to 0
       - Lower the number of assigned cells by 1
       - If the move in question is the bifurcation move, then stack a "rem" instruction for row,col,val
   - Remove moves. Syntax: ("rem",row,col,val)
-    When being DONE:
+    > When being DONE:
     - Removes val from the possibilities for row,col
       - If only one possible value remains, stack a 'set' instruction for that value
       - If no values remain, raise an "ERROR"
     - Decrease the number of potential cells for val in the row/column/box of row,col by 1
       - If the number of potential cells for val in the row/column/box is 1, then stack a 'set' instruction for the remaining cell
       - If the number of potential cells for val in the row/column/box is 0, raise an "ERROR"
-    When being UNDONE:
+    > When being UNDONE:
     - Adds val to the possibilities for row,col
     - Increase the number of potential cells for val in the row/column/box of row,col by 1
   - There is an extra special instruction consisting only of a string that says "ERROR", which signals that the solver should start
