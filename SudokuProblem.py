@@ -60,23 +60,27 @@ class SudokuProblem:
             if len(row) != 9:
                 raise TypeError("Sudoku grid must be 9x9")
             for element in row:
-                if element not in range(0,10):
+                if element not in range(10):
                     raise ValueError("Sudoku cells must contain numbers from 0 (unassigned) to 9")
     
-    def execute_set(instruction):
+    def execute_set(self, instruction):
         # do not repeat instruction if it has already been executed
-        if puzzle[instruction[1]][instruction[2]] == instruction[3]:
+        if self.puzzle[instruction[1]][instruction[2]] == instruction[3]:
             if self.verbose:
-                print(f"Set: {instruction[1]},{instruction[2]} is already {instruction[3]}."
+                print(f"Set: {instruction[1]},{instruction[2]} is already {instruction[3]}.")
             return []
-        elif puzzle[instruction[1]][instruction[2]] > 0:
+        elif self.puzzle[instruction[1]][instruction[2]] > 0:
             if self.verbose:
-                print(f"Set ERROR: {instruction[1]},{instruction[2]} is already set to {puzzle[instruction[1]][instruction[2]]}! ERROR!"
+                print(f"Set ERROR: {instruction[1]},{instruction[2]} is already set to {self.puzzle[instruction[1]][instruction[2]]}! ERROR!")
             return ["ERROR"]
         if self.verbose:
-            print(f"Setting {instruction[1]},{instruction[2]} to {instruction[3]}."
-        puzzle[instruction[1]][instruction[2]] = instruction[3]
+            print(f"Setting {instruction[1]},{instruction[2]} to {instruction[3]}.")
+        self.puzzle[instruction[1]][instruction[2]] = instruction[3]
         self.assigned += 1
+        if not self.check_consistency():
+            print("Set ERROR: consistency check failed!")
+            return ["ERROR"]
+            
         stack_to_add = []
         
         # REM instructions: for self
@@ -106,58 +110,82 @@ class SudokuProblem:
         
         return stack_to_add 
         
-    def set_box(box, val):
-        pass
+    def set_box(self, box, val):
+        start_r = 3*(box//3)
+        start_c = 3*(box%3)
+        for row in range(start_r,start_r+3):
+            for col in range(start_c,start_c+3):
+                if self.possibilities[row][col][val]:
+                    return ("set",row,col,val)
         
-    def set_col(col, val):
-        pass
+    def set_col(self, col, val):
+        for row in range(9):
+            if self.possibilities[row][col][val]:
+                return ("set",row,col,val)
         
-    def set_row(row, val):
-        pass
+    def set_row(self, row, val):
+        for col in range(9):
+            if self.possibilities[row][col][val]:
+                return ("set",row,col,val)
         
-    def execute_rem(instruction):
+    def execute_rem(self, instruction):
         # prevent re-execution
-        if not possibilities[instruction[1]][instruction[2]][instruction[3]]:
+        if not self.possibilities[instruction[1]][instruction[2]][instruction[3]]:
             if self.verbose:
                 print(f"Rem: cell {instruction[1]},{instruction[2]} is already devoid of {instruction[3]} as a possibility!")
             return []
             
         # carry out instructions
         if self.verbose:
-            print(f"Removing {instruction[3]} from possibilities for {instruction[1]},{instruction[2]}."            
-        possibilities[instruction[1]][instruction[2]][instruction[3]] = False
-        rows[instruction[1]][instruction[3]] -= 1
-        cols[instruction[2]][instruction[3]] -= 1
+            print(f"Removing {instruction[3]} from possibilities for {instruction[1]},{instruction[2]}.")          
+        self.possibilities[instruction[1]][instruction[2]][instruction[3]] = False
+        self.rows[instruction[1]][instruction[3]] -= 1
+        self.cols[instruction[2]][instruction[3]] -= 1
         box = 3*(instruction[1]//3)+(instruction[2]//3)
-        boxes[box][instruction[3]] -= 1
+        self.boxes[box][instruction[3]] -= 1
         
         # CHECK ALL LOGICAL INCONSISTENCIES!
         if sum(possibilities[instruction[1]][instruction[2]]) < 2:
             if self.verbose:
                 print(f"Rem ERROR: cell {instruction[1]},{instruction[2]} is out of options!")
             return ["ERROR"]
-        if rows[instruction[1]][instruction[3]] == 0:
+        if self.rows[instruction[1]][instruction[3]] == 0:
             if self.verbose:
                 print(f"Rem ERROR: row {instruction[1]} has no place for {instruction[3]}!")
             return ["ERROR"]
-        if cols[instruction[2]][instruction[3]] == 0:
+        if self.cols[instruction[2]][instruction[3]] == 0:
             if self.verbose:
                 print(f"Rem ERROR: column {instruction[2]} has no place for {instruction[3]}!")
             return ["ERROR"]
-        if boxes[box][instruction[3]] == 0:
+        if self.boxes[box][instruction[3]] == 0:
             if self.verbose:
                 print(f"Rem ERROR: box {box} has no place for {instruction[3]}!")
             return ["ERROR"]
         
+        # check for naked single
+        instructions_to_add = []
+        if sum(self.possibilities[instruction[1]][instruction[2]]) == 2:
+            for i in range(1,10):
+                if self.possibilities[instruction[1]][instruction[2]][i]:
+                    instructions_to_add.append(("set",instruction[1],instruction[2],i))
+                    break
+        
+        # check for hidden single
+        if self.rows[instruction[1]][instruction[3]] == 1:
+            instructions_to_add.append(self.set_row(instruction[1],instruction[3]))
+        if self.cols[instruction[2]][instruction[3]] == 1:
+            instructions_to_add.append(self.set_col(instruction[2],instruction[3]))
+        if self.boxes[instruction[1]][instruction[3]] == 1:
+            instructions_to_add.append(self.set_box(box,instruction[3]))
+        
+        return instructions_to_add
     
-    def execute(instruction):
+    def execute(self, instruction):
         if instruction[0] == "set":
-            execute_set(instruction)
+            self.execute_set(instruction)
         elif instruction[0] == "rem":
-            execute_rem(instruction)
+            self.execute_rem(instruction)
                     
-    
-
 
 if __name__ == '__main__':
     pass
