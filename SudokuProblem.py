@@ -111,6 +111,7 @@ class SudokuProblem:
         return stack_to_add 
         
     def set_box(self, box, val):
+        # if a hidden single exists, find the corresponding cell
         start_r = 3*(box//3)
         start_c = 3*(box%3)
         for row in range(start_r,start_r+3):
@@ -119,11 +120,13 @@ class SudokuProblem:
                     return ("set",row,col,val)
         
     def set_col(self, col, val):
+        # if a hidden single exists, find the corresponding cell
         for row in range(9):
             if self.possibilities[row][col][val]:
                 return ("set",row,col,val)
         
     def set_row(self, row, val):
+        # if a hidden single exists, find the corresponding cell
         for col in range(9):
             if self.possibilities[row][col][val]:
                 return ("set",row,col,val)
@@ -182,9 +185,36 @@ class SudokuProblem:
     
     def execute(self, instruction):
         if instruction[0] == "set":
-            self.execute_set(instruction)
+            return self.execute_set(instruction)
         elif instruction[0] == "rem":
-            self.execute_rem(instruction)
+            return self.execute_rem(instruction)
+            
+    def undo_rem(self, instruction):
+        if self.possibilities[instruction[1]][instruction[2]][instruction[3]]:
+            if self.verbose:
+                print(f"<<< UNDO Rem: cell {instruction[1]},{instruction[2]} already has {instruction[3]} as a possibility!")
+            return
+        
+        self.possibilities[instruction[1]][instruction[2]][instruction[3]] = True
+        self.rows[instruction[1]][instruction[3]] += 1
+        self.cols[instruction[2]][instruction[3]] += 1
+        box = 3*(instruction[1]//3)+(instruction[2]//3)
+        self.boxes[box][instruction[3]] += 1
+        
+    def undo_set(self, instruction):
+        if self.puzzle[instruction[1]][instruction[2]] == 0:
+            if self.verbose:
+                print(f"<<< UNDO Set: {instruction[1]},{instruction[2]} is already unassigned.")
+            return
+            
+        self.puzzle[instruction[1]][instruction[2]] = 0
+        self.assigned -= 1
+        
+    def undo(self, instruction):
+        if instruction[0] == "set":
+            self.undo_set(instruction)
+        elif instruction[0] == "rem":
+            self.undo_rem(instruction)
                     
 
 if __name__ == '__main__':
