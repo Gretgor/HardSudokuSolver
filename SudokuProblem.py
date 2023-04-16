@@ -2,7 +2,7 @@
 class SudokuProblem:
 
     def __init__(self, puzzle, verbose = True):
-        self.puzzle = puzzle
+        self.puzzle = puzzle.copy()
         self.assigned = 0
         self.possibilities = [[[True for _ in range(10)] for _ in range(9)] for _ in range(9)]
         self.rows = [[9 for _ in range(10)] for _ in range(9)]
@@ -148,7 +148,7 @@ class SudokuProblem:
         self.boxes[box][instruction[3]] -= 1
         
         # CHECK ALL LOGICAL INCONSISTENCIES!
-        if sum(possibilities[instruction[1]][instruction[2]]) < 2:
+        if sum(self.possibilities[instruction[1]][instruction[2]]) < 2:
             if self.verbose:
                 print(f"Rem ERROR: cell {instruction[1]},{instruction[2]} is out of options!")
             return ["ERROR"]
@@ -195,6 +195,7 @@ class SudokuProblem:
                 print(f"<<< UNDO Rem: cell {instruction[1]},{instruction[2]} already has {instruction[3]} as a possibility!")
             return
         
+        # undo rem: remembering to re-increment the possibility variables
         self.possibilities[instruction[1]][instruction[2]][instruction[3]] = True
         self.rows[instruction[1]][instruction[3]] += 1
         self.cols[instruction[2]][instruction[3]] += 1
@@ -207,6 +208,7 @@ class SudokuProblem:
                 print(f"<<< UNDO Set: {instruction[1]},{instruction[2]} is already unassigned.")
             return
             
+        # undo set: remembering to decrement the assigned variable
         self.puzzle[instruction[1]][instruction[2]] = 0
         self.assigned -= 1
         
@@ -215,7 +217,81 @@ class SudokuProblem:
             self.undo_set(instruction)
         elif instruction[0] == "rem":
             self.undo_rem(instruction)
+            
+    def rewind(self):
+        if self.verbose:
+            print("<<< REWIND STARTING")
+        # backtracks to the last bifurcation
+        last_one = self.bifurcations.pop()
+        while self.index >= last_one:
+            self.undo(self.instructions[index])
+            index -= 1
+        self.index += 1
+        
+        # remove the bifurcated possibility, as it led to a
+        # contradiction
+        bifurc_step = self.instructions[self.index]
+        new_command = ("rem",bifurc_step[1],bifurc_step[2],bifurc_step[3])        
+        self.instructions = self.instructions[:last_one]
+        self.instructions.append(new_command)
+        
+    def bifurcate(self):
+        # chooses a candidate for bifurcation
+        # Heuristic used: the most restricted candidate
+        cur_candidate = (0,0)
+        cur_poss = 11
+        for i in range(9):
+            for j in range(9):
+                if self.puzzle[i][j] == 0:
+                    poss = sum(self.possibilities[i][j])
+                    if poss < cur_poss:
+                        cur_poss = poss
+                        cur_candidate = (i,j)
+                        
+        for i in range(1,10):
+            if self.possibilities[cur_candidate[0]][cur_candidate[1]][i]:
+                self.instructions.append(("set",cur_candidate[0],cur_candidate[1],i))
+                self.bifurcations.append(len(instructions)-1)
+        
+    def solve(self):
+        # force "set" instructions for givens, to get all deductions
+        # possible from them
+        for i in range(9):
+            for j in range(9):
+                if self.puzzle[i][j] > 0:
+                    self.instructions.append(("set",i,j,self.puzzle[i][j]))
+                    self.puzzle[i][j] = 0
                     
-
+        # outermost loop: stops when puzzle solved
+        while self.assigned < 81:
+            # inner loop: stops when no logical deductions are left
+            while self.index < len(self.instructions):
+                new_commands = self.execute(self.instructions[self.index])
+                if new_commands[0] == "ERROR":
+                    if len(self.bifurcations) > 0:
+                        self.rewind()
+                    else:
+                        # if an error was raised without any bifurcations,
+                        # then the puzzle reached an unsolvable state via
+                        # logic deductions alone, implying it is unsolvable
+                        raise ValueError("Puzzle is unsolvable! Double check the puzzle if you think that might not be the case.")
+                else:
+                    self.instructions.extend(new_commands)
+                    self.index += 1
+            # --- EXTRA INFERENCE RULES GO HERE
+            new_inference = False
+            # (none so far)
+            # ---------------------------------
+            # BIFURCATION BELOW
+            if not new_inference:
+                if self.verbose:
+                    print("Out of logical steps. Attempting bifurcation.")
+                self.bifurcate()
+        if self.verbose:
+            for i in range(9):
+                print(self.puzzle[i])
+        return self.puzzle
+        
+                    
 if __name__ == '__main__':
     pass
