@@ -12,8 +12,8 @@ class SudokuProblem:
         self.index = 0
         self.bifurcations = []
         self.verbose = verbose
-        validate_input()
-        if not check_consistency():
+        self.validate_input()
+        if not self.check_consistency():
             raise ValueError("Input grid contains repeats")
         
     def check_consistency(self):
@@ -66,19 +66,22 @@ class SudokuProblem:
     def execute_set(self, instruction):
         # do not repeat instruction if it has already been executed
         if self.puzzle[instruction[1]][instruction[2]] == instruction[3]:
-            if self.verbose:
-                print(f"Set: {instruction[1]},{instruction[2]} is already {instruction[3]}.")
             return []
         elif self.puzzle[instruction[1]][instruction[2]] > 0:
             if self.verbose:
-                print(f"Set ERROR: {instruction[1]},{instruction[2]} is already set to {self.puzzle[instruction[1]][instruction[2]]}! ERROR!")
+                print(f"Set ERROR: {instruction[1]},{instruction[2]} is already set to {self.puzzle[instruction[1]][instruction[2]]}! Can't set it to {instruction[3]}!")
+            # must reduce index by 1 so move does not get undone
+            self.index -= 1
             return ["ERROR"]
         if self.verbose:
             print(f"Setting {instruction[1]},{instruction[2]} to {instruction[3]}.")
         self.puzzle[instruction[1]][instruction[2]] = instruction[3]
         self.assigned += 1
         if not self.check_consistency():
-            print("Set ERROR: consistency check failed!")
+            if self.verbose:
+                print("Set ERROR: consistency check failed!")
+                for i in range(9):
+                    print(self.puzzle[i])
             return ["ERROR"]
             
         stack_to_add = []
@@ -86,19 +89,22 @@ class SudokuProblem:
         # REM instructions: for self
         for v in range(1,10):
             if v != instruction[3]:
-                stack_to_add.append(("rem",instruction[1],instruction[2],v))
+                if self.possibilities[instruction[1]][instruction[2]][v]:
+                    stack_to_add.append(("rem",instruction[1],instruction[2],v))
         
         # REM instructions: for row
         i = instruction[1]
         for j in range(0,9):
             if j != instruction[2]:
-                stack_to_add.append(("rem",i,j,instruction[3]))
+                if self.possibilities[i][j][instruction[3]]:
+                    stack_to_add.append(("rem",i,j,instruction[3]))
         
         # REM instruction: for column
         j = instruction[2]
         for i in range(0,9):
             if i != instruction[1]:
-                stack_to_add.append(("rem",i,j,instruction[3]))
+                if self.possibilities[i][j][instruction[3]]:
+                    stack_to_add.append(("rem",i,j,instruction[3]))
         
         # REM instruction: for box
         start_r = 3*(instruction[1]//3)
@@ -106,7 +112,8 @@ class SudokuProblem:
         for i in range(start_r, start_r+3):
             for j in range(start_c, start_c+3):
                 if i != instruction[1] or j != instruction[2]:
-                    stack_to_add.append(("rem",i,j,instruction[3]))
+                    if self.possibilities[i][j][instruction[3]]:
+                        stack_to_add.append(("rem",i,j,instruction[3]))
         
         return stack_to_add 
         
@@ -116,26 +123,36 @@ class SudokuProblem:
         start_c = 3*(box%3)
         for row in range(start_r,start_r+3):
             for col in range(start_c,start_c+3):
-                if self.possibilities[row][col][val]:
+                if self.possibilities[row][col][val] and self.puzzle[row][col] != val:
+                    if self.puzzle[row][col] > 0:
+                        return "ERROR"
+                    if self.verbose:
+                        print(f"Hidden single found! Cell {row},{col} only cell in box for {val}")
                     return ("set",row,col,val)
         
     def set_col(self, col, val):
         # if a hidden single exists, find the corresponding cell
         for row in range(9):
-            if self.possibilities[row][col][val]:
+            if self.possibilities[row][col][val] and self.puzzle[row][col] != val:
+                if self.puzzle[row][col] > 0:
+                    return "ERROR"
+                if self.verbose:
+                    print(f"Hidden single found! Cell {row},{col} only cell in column for {val}")
                 return ("set",row,col,val)
         
     def set_row(self, row, val):
         # if a hidden single exists, find the corresponding cell
         for col in range(9):
-            if self.possibilities[row][col][val]:
+            if self.possibilities[row][col][val] and self.puzzle[row][col] != val:
+                if self.puzzle[row][col] > 0:
+                    return "ERROR"
+                if self.verbose:
+                    print(f"Hidden single found! Cell {row},{col} only cell in row for {val}")
                 return ("set",row,col,val)
         
     def execute_rem(self, instruction):
         # prevent re-execution
         if not self.possibilities[instruction[1]][instruction[2]][instruction[3]]:
-            if self.verbose:
-                print(f"Rem: cell {instruction[1]},{instruction[2]} is already devoid of {instruction[3]} as a possibility!")
             return []
             
         # carry out instructions
@@ -170,16 +187,33 @@ class SudokuProblem:
         if sum(self.possibilities[instruction[1]][instruction[2]]) == 2:
             for i in range(1,10):
                 if self.possibilities[instruction[1]][instruction[2]][i]:
-                    instructions_to_add.append(("set",instruction[1],instruction[2],i))
+                    if self.verbose:
+                        print(f"Naked single found! Cell {instruction[1]},{instruction[2]} gets value {i}")
+                    if self.puzzle[instruction[1]][instruction[2]] != i:
+                        if self.puzzle[instruction[1]][instruction[2]] > 0:
+                            return ["ERROR"]
+                        instructions_to_add.append(("set",instruction[1],instruction[2],i))
                     break
         
         # check for hidden single
         if self.rows[instruction[1]][instruction[3]] == 1:
-            instructions_to_add.append(self.set_row(instruction[1],instruction[3]))
+            inst = self.set_row(instruction[1],instruction[3])
+            if inst is not None:
+                if inst == "ERROR":
+                    return ["ERROR"]
+                instructions_to_add.append(inst)
         if self.cols[instruction[2]][instruction[3]] == 1:
-            instructions_to_add.append(self.set_col(instruction[2],instruction[3]))
-        if self.boxes[instruction[1]][instruction[3]] == 1:
-            instructions_to_add.append(self.set_box(box,instruction[3]))
+            inst = self.set_col(instruction[2],instruction[3])
+            if inst is not None:
+                if inst == "ERROR":
+                    return ["ERROR"]
+                instructions_to_add.append(inst)
+        if self.boxes[box][instruction[3]] == 1:
+            inst = self.set_box(box,instruction[3])
+            if inst is not None:
+                if inst == "ERROR":
+                    return ["ERROR"]
+                instructions_to_add.append(inst)
         
         return instructions_to_add
     
@@ -191,8 +225,6 @@ class SudokuProblem:
             
     def undo_rem(self, instruction):
         if self.possibilities[instruction[1]][instruction[2]][instruction[3]]:
-            if self.verbose:
-                print(f"<<< UNDO Rem: cell {instruction[1]},{instruction[2]} already has {instruction[3]} as a possibility!")
             return
         
         # undo rem: remembering to re-increment the possibility variables
@@ -204,8 +236,6 @@ class SudokuProblem:
         
     def undo_set(self, instruction):
         if self.puzzle[instruction[1]][instruction[2]] == 0:
-            if self.verbose:
-                print(f"<<< UNDO Set: {instruction[1]},{instruction[2]} is already unassigned.")
             return
             
         # undo set: remembering to decrement the assigned variable
@@ -213,19 +243,23 @@ class SudokuProblem:
         self.assigned -= 1
         
     def undo(self, instruction):
+        if self.verbose:
+            print(f"Undoing type {instruction[0]}, cell {instruction[1]},{instruction[2]}, value {instruction[3]}")
         if instruction[0] == "set":
             self.undo_set(instruction)
         elif instruction[0] == "rem":
             self.undo_rem(instruction)
             
     def rewind(self):
+        if self.index >= len(self.instructions):
+            self.index = len(self.instructions) - 1
         if self.verbose:
             print("<<< REWIND STARTING")
         # backtracks to the last bifurcation
         last_one = self.bifurcations.pop()
         while self.index >= last_one:
-            self.undo(self.instructions[index])
-            index -= 1
+            self.undo(self.instructions[self.index])
+            self.index -= 1
         self.index += 1
         
         # remove the bifurcated possibility, as it led to a
@@ -251,9 +285,11 @@ class SudokuProblem:
         for i in range(1,10):
             if self.possibilities[cur_candidate[0]][cur_candidate[1]][i]:
                 self.instructions.append(("set",cur_candidate[0],cur_candidate[1],i))
-                self.bifurcations.append(len(instructions)-1)
+                self.bifurcations.append(len(self.instructions)-1)
+                break
         
     def solve(self):
+        solution = [[0 for _ in range(9)] for _ in range(9)]
         # force "set" instructions for givens, to get all deductions
         # possible from them
         for i in range(9):
@@ -262,24 +298,55 @@ class SudokuProblem:
                     self.instructions.append(("set",i,j,self.puzzle[i][j]))
                     self.puzzle[i][j] = 0
                     
+        stop = False
+        solutions = 0
         # outermost loop: stops when puzzle solved
-        while self.assigned < 81:
+        while stop == False:
             # inner loop: stops when no logical deductions are left
             while self.index < len(self.instructions):
                 new_commands = self.execute(self.instructions[self.index])
-                if new_commands[0] == "ERROR":
+                if new_commands and new_commands[0] == "ERROR":
                     if len(self.bifurcations) > 0:
                         self.rewind()
                     else:
                         # if an error was raised without any bifurcations,
                         # then the puzzle reached an unsolvable state via
                         # logic deductions alone, implying it is unsolvable
-                        raise ValueError("Puzzle is unsolvable! Double check the puzzle if you think that might not be the case.")
+                        # (or the removal of previously valid solutions
+                        # made it unsolvable)
+                        stop = True
                 else:
                     self.instructions.extend(new_commands)
                     self.index += 1
-            # --- EXTRA INFERENCE RULES GO HERE
             new_inference = False
+            if self.assigned == 81:
+                if self.check_consistency():
+                    if self.verbose:
+                        print("SOLUTION FOUND!")
+                        for i in range(9):
+                            print(self.puzzle[i])
+                        print("--------")
+                    new_inference = True
+                    solutions += 1
+                    if solutions >= 2:
+                        raise ValueError("Puzzle has multiple solutions!")
+                    # if this is the first solution found, register ir
+                    for i in range(9):
+                        for j in range(9):
+                            solution[i][j] = self.puzzle[i][j]
+                    # if this solution was found without bifurcations,
+                    # then the puzzle is uniquely solvable
+                    if len(self.bifurcations) == 0:
+                        if self.verbose:
+                            for i in range(9):
+                                print(self.puzzle[i])
+                        return solution
+                    else:
+                        self.rewind()
+                else:
+                    raise ValueError("Final result is invalid")
+            # --- EXTRA INFERENCE RULES GO HERE
+            
             # (none so far)
             # ---------------------------------
             # BIFURCATION BELOW
@@ -287,11 +354,27 @@ class SudokuProblem:
                 if self.verbose:
                     print("Out of logical steps. Attempting bifurcation.")
                 self.bifurcate()
-        if self.verbose:
-            for i in range(9):
-                print(self.puzzle[i])
-        return self.puzzle
+        if solutions == 0:
+            raise ValueError("Puzzle is unsolvable")
+        return solution
         
                     
 if __name__ == '__main__':
-    pass
+    puzzle = [
+          [6, 0, 0, 0, 0, 0, 0, 0, 2],
+[0, 0, 3, 6, 0, 1, 7, 0, 0],
+[0, 7, 0, 0, 4, 0, 0, 1, 0],
+[0, 5, 0, 9, 0, 4, 0, 3, 0],
+[0, 0, 9, 0, 0, 0, 1, 0, 0],
+[0, 6, 0, 7, 0, 8, 0, 2, 0],
+[0, 3, 0, 0, 6, 0, 0, 5, 0],
+[0, 0, 5, 3, 0, 9, 4, 0, 0],
+[7, 0, 0, 0, 0, 0, 0, 0, 3]
+        ]
+    problem = SudokuProblem(puzzle)
+    if not problem.check_consistency():
+        raise ValueError("Final result is invalid")
+    solution = problem.solve()
+    print("CONCLUDED CONCLUDED CONCLUDED")
+    for i in range(9):
+        print(solution[i])
