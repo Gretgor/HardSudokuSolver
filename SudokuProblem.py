@@ -1,18 +1,34 @@
 
 class SudokuProblem:
+    """
+    Class contains Sudoku problem, and the solver for said problem
+    """
 
     def __init__(self, puzzle, verbose = True):
+        # puzzle: initial grid state
         self.puzzle = puzzle.copy()
+        
+        # number of assigned grid elements
         self.assigned = 0
+        
+        # possibility arrays to easily spot naked and hidden singles
         self.possibilities = [[[True for _ in range(10)] for _ in range(9)] for _ in range(9)]
         self.rows = [[9 for _ in range(10)] for _ in range(9)]
         self.cols = [[9 for _ in range(10)] for _ in range(9)]
         self.boxes = [[9 for _ in range(10)] for _ in range(9)]
+        
+        # instruction set, keeping track of bifurcations, etc
         self.instructions = []
         self.index = 0
         self.bifurcations = []
+        
+        # set verbose if you want to accompany the logical steps taken
         self.verbose = verbose
+        
+        # validates input
         self.validate_input()
+        
+        # validates consistency
         if not self.check_consistency():
             raise ValueError("Input grid contains repeats")
         
@@ -64,9 +80,20 @@ class SudokuProblem:
                     raise ValueError("Sudoku cells must contain numbers from 0 (unassigned) to 9")
     
     def execute_set(self, instruction):
+        """
+        Executes a 'set' function, which sets a specific cell of the
+        grid to a value. Also updates the assigned counter.
+        - Returns a list of 'rem' instructions corresponding to elements
+          in the same row/box/column as the set cell for the cell's
+          new value, as well as the set cell for values different from
+          its new value
+        """
         # do not repeat instruction if it has already been executed
         if self.puzzle[instruction[1]][instruction[2]] == instruction[3]:
             return []
+            
+        # if the cell is already set to something else, then an 
+        # inconsistency occurred at some point in the execution
         elif self.puzzle[instruction[1]][instruction[2]] > 0:
             if self.verbose:
                 print(f"Set ERROR: {instruction[1]},{instruction[2]} is already set to {self.puzzle[instruction[1]][instruction[2]]}! Can't set it to {instruction[3]}!")
@@ -112,6 +139,12 @@ class SudokuProblem:
         return stack_to_add 
         
     def set_box(self, box, val):
+        """
+        given a box with only one cell that can take a certain 
+        value, return a 'set' instruction for that cell and that value,
+        unless said cell either already has that value (None), or has a
+        different value (ERROR)
+        """
         # if a hidden single exists, find the corresponding cell
         start_r = 3*(box//3)
         start_c = 3*(box%3)
@@ -127,6 +160,12 @@ class SudokuProblem:
                     return ("set",row,col,val)
         
     def set_col(self, col, val):
+        """
+        given a column with only one cell that can take a certain 
+        value, return a 'set' instruction for that cell and that value,
+        unless said cell either already has that value (None), or has a
+        different value (ERROR)
+        """
         # if a hidden single exists, find the corresponding cell
         for row in range(9):
             if self.possibilities[row][col][val]:
@@ -139,6 +178,12 @@ class SudokuProblem:
                 return ("set",row,col,val)
         
     def set_row(self, row, val):
+        """
+        given a row with only one cell that can take a certain 
+        value, return a 'set' instruction for that cell and that value,
+        unless said cell either already has that value (None), or has a
+        different value (ERROR)
+        """
         # if a hidden single exists, find the corresponding cell
         for col in range(9):
             if self.possibilities[row][col][val]:
@@ -151,6 +196,11 @@ class SudokuProblem:
                 return ("set",row,col,val)
         
     def execute_rem(self, instruction):
+        """
+        remove a value from the list of possibiliites of a cell.
+        also updates the possibility arrays for the cell's 
+        row/column/box
+        """
         # prevent re-execution
         if not self.possibilities[instruction[1]][instruction[2]][instruction[3]]:
             return []
@@ -185,6 +235,10 @@ class SudokuProblem:
         return []
         
     def check_singles(self):
+        """
+        Checks for naked and hidden singles in the grid.
+        Returns 'set' instructions for found singles.
+        """
         instructions_to_add = []
         # check for naked single
         for i in range(9):
@@ -224,12 +278,19 @@ class SudokuProblem:
         return instructions_to_add
     
     def execute(self, instruction):
+        """
+        checks whether instruction is 'set' or 'rem' to call the correct
+        execution method
+        """
         if instruction[0] == "set":
             return self.execute_set(instruction)
         elif instruction[0] == "rem":
             return self.execute_rem(instruction)
             
     def undo_rem(self, instruction):
+        """
+        undoes the effects of a 'rem' instruction
+        """
         if self.possibilities[instruction[1]][instruction[2]][instruction[3]]:
             return
         
@@ -241,6 +302,9 @@ class SudokuProblem:
         self.boxes[box][instruction[3]] += 1
         
     def undo_set(self, instruction):
+        """
+        undoes the effects of a 'set' instruction
+        """
         if self.puzzle[instruction[1]][instruction[2]] == 0:
             return
             
@@ -249,6 +313,10 @@ class SudokuProblem:
         self.assigned -= 1
         
     def undo(self, instruction):
+        """
+        checks whether instruction is 'set' or 'rem' to call the correct
+        undoing method
+        """
         if self.verbose:
             print(f"Undoing type {instruction[0]}, cell {instruction[1]},{instruction[2]}, value {instruction[3]}")
         if instruction[0] == "set":
@@ -257,6 +325,13 @@ class SudokuProblem:
             self.undo_rem(instruction)
             
     def rewind(self):
+        """
+        rewinds the puzzle's state back to the latest bifurcation, by
+        undoing all instructions done after said bifurcation.
+        
+        also stacks a 'rem' instruction for the value attempted in the
+        bifurcation, so the algorithm can try something else
+        """
         if self.index >= len(self.instructions):
             self.index = len(self.instructions) - 1
         if self.verbose:
@@ -269,13 +344,18 @@ class SudokuProblem:
         self.index += 1
         
         # remove the bifurcated possibility, as it led to a
-        # contradiction
+        # contradiction (or to test another potential solution)
         bifurc_step = self.instructions[self.index]
         new_command = ("rem",bifurc_step[1],bifurc_step[2],bifurc_step[3])        
         self.instructions = self.instructions[:last_one]
         self.instructions.append(new_command)
         
     def bifurcate(self):
+        """
+        selects an unset cell with the minimum amount of possibilities,
+        stacks a 'set' instruction for its lowest possible value, and
+        marks it as a bifurcation (to be undone later by a rewind)
+        """
         # chooses a candidate for bifurcation
         # Heuristic used: the most restricted candidate
         cur_candidate = (0,0)
@@ -295,6 +375,11 @@ class SudokuProblem:
                 break
         
     def solve(self):
+        """
+        main solver algorithm. Attempts to complete the grid contained 
+        in self.puzzle. Returns the complete grid if a solution exists
+        and is unique, and otherwise raises errors.
+        """
         solution = [[0 for _ in range(9)] for _ in range(9)]
         # force "set" instructions for givens, to get all deductions
         # possible from them
@@ -306,7 +391,7 @@ class SudokuProblem:
                     
         stop = False
         solutions = 0
-        # outermost loop: stops when puzzle solved
+        # outermost loop: stops when puzzle is solved or impossible
         while stop == False:
             # inner loop: stops when no logical deductions are left
             while self.index < len(self.instructions):
@@ -330,6 +415,10 @@ class SudokuProblem:
                     self.index += 1
             solution_found = False
             if self.assigned == 81:
+                # if all 81 cells are assigned, a solution was found.
+                # given that no repeats are ever placed into the grid
+                # by the solution algorithm, then we know this solution
+                # to be consistent
                 if self.verbose:
                     print("SOLUTION FOUND!")
                     for i in range(9):
@@ -339,7 +428,7 @@ class SudokuProblem:
                 solutions += 1
                 if solutions >= 2:
                     raise ValueError("Puzzle has multiple solutions!")
-                # if this is the first solution found, register ir
+                # if this is the first solution found, register it
                 for i in range(9):
                     for j in range(9):
                         solution[i][j] = self.puzzle[i][j]
@@ -353,6 +442,8 @@ class SudokuProblem:
                 else:
                     self.rewind()
             else:
+                # no more instructions: check for naked and hidden 
+                # singles. 
                 more_instructions = self.check_singles()
                 self.instructions.extend(more_instructions)
                 # --- EXTRA INFERENCE RULES GO HERE
@@ -360,6 +451,9 @@ class SudokuProblem:
                 # ---------------------------------
                 
             # BIFURCATION BELOW
+            # (the instruction pointer has run out of instructions, no
+            # new naked/hidden singles were found, and no new solution
+            # was found)
             if len(self.instructions) <= self.index and not solution_found:
                 if self.verbose:
                     print("Out of logical steps. Attempting bifurcation.")
