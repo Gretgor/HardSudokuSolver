@@ -1,5 +1,5 @@
 # HardSudokuSolver
-A particularly hard exercise involving the creation of an universal (classic) Sudoku solver, taken straight from CodeWars
+A particularly hard exercise from CodeWars involving the creation of an universal (classic) Sudoku solver.
 
 Problem:
   - Given a 9x9 matrix of integers (from 0 to 9, with 0 representing "unassigned"), provide the completed Sudoku grid (if it exists) or
